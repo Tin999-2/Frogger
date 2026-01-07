@@ -16,14 +16,14 @@
 </head>
 <body>
 
-    <h2>Frogger: ゆっくり道路を渡ろう</h2>
-    <p class="hint">矢印キー または 画面をタップして移動</p>
+    <h2>Frogger: 道路を渡りきろう</h2>
+    <p class="hint">PCは矢印キーで移動。スマホはカエルの左右をタップすると横移動・カエルの上下をタップすると上下移動</p>
 
     <canvas id="game" width="400" height="500"></canvas>
 
     <div id="clear-screen">
-        <h1 style="color: #2ecc71;">おめでとう！</h1>
-        <p>最終座標を手に入れた：</p>
+        <h1 style="color: #2ecc71;">You did it！</h1>
+        <p>Final coordinates:</p>
         <div class="coord">N 35 34.567<br>E 139 34.567</div>
         <button onclick="location.reload()" style="padding: 10px 20px; cursor: pointer;">リプレイ</button>
     </div>
@@ -120,4 +120,5 @@
         draw();
     </script>
 </body>
+
 </html>
