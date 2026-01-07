@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>Frogger Puzzle - Geocaching</title>
+    <style>
+        body { background: #333; color: white; font-family: sans-serif; text-align: center; margin: 0; overflow: hidden; }
+        canvas { background: #111; border: 4px solid #555; display: block; margin: 20px auto; touch-action: none; }
+        #clear-screen {
+            display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.9); border: 3px solid #f1c40f; padding: 30px; border-radius: 15px; z-index: 10;
+        }
+        .coord { font-size: 28px; color: #f1c40f; font-family: monospace; margin: 20px 0; }
+        .hint { color: #aaa; font-size: 14px; }
+    </style>
+</head>
+<body>
+
+    <h2>Frogger: 道路を渡りきれ！</h2>
+    <p class="hint">矢印キー または 画面の上下左右をタップして移動</p>
+
+    <canvas id="game" width="400" height="500"></canvas>
+
+    <div id="clear-screen">
+        <h1 style="color: #2ecc71;">おめでとう！</h1>
+        <p>最終座標を手に入れた：</p>
+        <div class="coord">N 35 34.567<br>E 139 34.445</div>
+        <button onclick="location.reload()" style="padding: 10px 20px; cursor: pointer;">リプレイ</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById("game");
+        const ctx = canvas.getContext("2d");
+        const clearScreen = document.getElementById("clear-screen");
+
+        const gridSize = 50;
+        let isCleared = false;
+
+        // プレイヤー設定
+        const player = { x: 4, y: 9, char: "🐸" };
+
+        // 道路の設定 (y座標, 速度, 方向1=右 -1=左, 車の絵文字)
+        const lanes = [
+            { y: 8, speed: 2.0, dir: -1, cars: [{x:0}, {x:200}, {x:350}], icon: "🚗" }, // 1本目
+            { y: 7, speed: 2.5, dir: 1,  cars: [{x:50}, {x:250}], icon: "🚕" },         // 2本目
+            { y: 6, speed: 4.0, dir: -1, cars: [{x:100}, {x:300}], icon: "🏎️" },        // 3本目
+            { y: 5, speed: 2.2, dir: 1,  cars: [{x:0}, {x:180}, {x:320}], icon: "🚚" }  // 4本目
+        ];
+
+        function draw() {
+            if (isCleared) return;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 背景描画
+            ctx.fillStyle = "#2ecc71"; // スタート地点の草
+            ctx.fillRect(0, 450, 400, 50);
+            ctx.fillRect(0, 0, 400, 250); // ゴール地帯
+
+            ctx.fillStyle = "#444"; // 道路
+            ctx.fillRect(0, 250, 400, 200);
+
+            // 車の移動と描画
+            lanes.forEach(lane => {
+                lane.cars.forEach(car => {
+                    car.x += lane.speed * lane.dir;
+                    if (car.x > 400) car.x = -50;
+                    if (car.x < -50) car.x = 400;
+
+                    ctx.font = "35px Arial";
+                    ctx.fillText(lane.icon, car.x, lane.y * gridSize + 35);
+
+                    // 当たり判定
+                    let px = player.x * gridSize;
+                    let py = player.y * gridSize;
+                    if (py === lane.y * gridSize && car.x < px + 30 && car.x + 40 > px) {
+                        resetPlayer();
+                    }
+                });
+            });
+
+            // プレイヤー描画
+            ctx.fillText(player.char, player.x * gridSize + 5, player.y * gridSize + 40);
+
+            // クリア判定
+            if (player.y <= 4) {
+                isCleared = true;
+                clearScreen.style.display = "block";
+            }
+
+            requestAnimationFrame(draw);
+        }
+
+        function resetPlayer() {
+            player.x = 4;
+            player.y = 9;
+        }
+
+        // キーボード操作
+        window.addEventListener("keydown", e => {
+            if (isCleared) return;
+            if (e.key === "ArrowUp" && player.y > 0) player.y--;
+            if (e.key === "ArrowDown" && player.y < 9) player.y++;
+            if (e.key === "ArrowLeft" && player.x > 0) player.x--;
+            if (e.key === "ArrowRight" && player.x < 7) player.x++;
+        });
+
+        // スマホ用タップ操作
+        canvas.addEventListener("mousedown", e => {
+            if (isCleared) return;
+            const rect = canvas.getBoundingClientRect();
+            const tx = e.clientX - rect.left;
+            const ty = e.clientY - rect.top;
+            const px = player.x * gridSize + 25;
+            const py = player.y * gridSize + 25;
+
+            if (Math.abs(tx - px) > Math.abs(ty - py)) {
+                if (tx > px && player.x < 7) player.x++;
+                else if (player.x > 0) player.x--;
+            } else {
+                if (ty > py && player.y < 9) player.y++;
+                else if (player.y > 0) player.y--;
+            }
+        });
+
+        draw();
+    </script>
+</body>
+</html>
