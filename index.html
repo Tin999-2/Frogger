@@ -10,60 +10,54 @@
             margin: 0; padding: 0; overflow: hidden; position: fixed; width: 100%; height: 100%;
         }
         canvas { 
-            background: #111; border: 2px solid #555; display: block; margin: 0 auto; 
+            background: #87CEEB; border: 2px solid #555; display: block; margin: 0 auto; 
             width: 95vw; max-width: 400px; height: auto; touch-action: none;
         }
-        #clear-screen {
-            display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            background: rgba(0,0,0,0.9); border: 3px solid #f1c40f; padding: 20px; border-radius: 15px; 
-            z-index: 10; width: 80%;
+        #start-screen, #clear-screen {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.9); border: 3px solid #2ecc71; padding: 30px; border-radius: 15px; 
+            z-index: 20; width: 70%;
         }
-        button { padding: 12px 24px; font-size: 1rem; margin-top: 10px; cursor: pointer; }
+        button { padding: 15px 30px; font-size: 1.2rem; cursor: pointer; background: #2ecc71; border: none; color: white; border-radius: 5px; }
     </style>
 </head>
 <body>
 
-    <h2 id="status">Go to the Frog House!</h2>
-    <canvas id="game" width="400" height="600"></canvas>
+    <div id="start-screen">
+        <h2>Frogger Game</h2>
+        <p>音を出すためにボタンを押してね</p>
+        <button onclick="startGame()">START</button>
+    </div>
 
-    <div id="clear-screen">
+    <div id="clear-screen" style="display:none;">
         <h2 style="color: #2ecc71;">Welcome Home!</h2>
         <div style="font-size: 2rem; color: #f1c40f;">Signal</div>
         <button onclick="location.reload()">Replay</button>
     </div>
 
+    <canvas id="game" width="400" height="600"></canvas>
+
     <script>
         const canvas = document.getElementById("game");
         const ctx = canvas.getContext("2d");
+        const startScreen = document.getElementById("start-screen");
         const clearScreen = document.getElementById("clear-screen");
 
-        // 音声設定
+        // 音声ファイル
         const bgm = new Audio('/assets/sounds/frog.mp3'); bgm.loop = true;
         const seJump = new Audio('/assets/sounds/jump.mp3');
         const seCrash = new Audio('/assets/sounds/crash.mp3');
         const seGoal = new Audio('/assets/sounds/goal.mp3');
 
-        let audioInitialized = false;
-        function initAudio() {
-            if (audioInitialized) return;
-            [bgm, seJump, seCrash, seGoal].forEach(s => { s.play().then(()=>{ if(s!==bgm){s.pause(); s.currentTime=0;} }).catch(()=>{}); });
-            audioInitialized = true;
-        }
-
-        const gridSize = 50;
+        let gameStarted = false;
         let isCleared = false;
+        const gridSize = 50;
         const player = { x: 4, y: 11, char: "🐸", vx: 0 };
 
-        // 1. 手前の芝生（y=9, 10）にだけ木とレンガを配置
+        // 障害物（手前の芝生 y=9, 10のみ）
         const obstacles = [
             {x: 1, y: 10, icon: "🌲"}, {x: 6, y: 10, icon: "🧱"},
             {x: 3, y: 9, icon: "🌲"}, {x: 5, y: 9, icon: "🧱"}
-        ];
-
-        // 2. 敵のスピードを1/4（0.3～0.5程度）に落とす
-        const enemies = [
-            {x: 0, y: 10, speed: 0.4, dir: 1, icon: "🐍"},
-            {x: 7, y: 9, speed: 0.5, dir: -1, icon: "🦀"}
         ];
 
         const lanes = [
@@ -73,15 +67,27 @@
             { y: 5, speed: 1.2, dir: 1,  logs: [{x:0, w:120}, {x:250, w:120}] }
         ];
 
+        // STARTボタンを押したときに音声を有効化
+        function startGame() {
+            startScreen.style.display = "none";
+            gameStarted = true;
+            bgm.play().catch(e => console.log("Audio Error:", e));
+            draw();
+        }
+
         function draw() {
-            if (isCleared) return;
+            if (!gameStarted || isCleared) return;
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // --- レイヤー1: 川 ---
+            // 1. 背景（空：水色）
+            ctx.fillStyle = "#87CEEB";
+            ctx.fillRect(0, 0, 400, 600);
+
+            // 2. 川のエリア
             ctx.fillStyle = "#2980b9";
             ctx.fillRect(0, 250, 400, 200);
 
-            // --- レイヤー2: 丸太 ---
+            // 3. 丸太
             let onLog = false;
             player.vx = 0;
             lanes.forEach(lane => {
@@ -97,39 +103,25 @@
                 });
             });
 
-            // --- レイヤー3: 芝生（川の上にかぶせる） ---
+            // 4. 芝生（丸太の上にかぶせる）
             ctx.fillStyle = "#2ecc71";
-            ctx.fillRect(0, 450, 400, 150); // 手前の芝生 (y=9, 10, 11)
+            ctx.fillRect(0, 450, 400, 150); // 手前 (y=9, 10, 11)
             ctx.fillRect(0, 200, 400, 50);  // 中洲 (y=4)
-            ctx.fillRect(0, 0, 400, 50);    // ゴール地点 (y=0)
+            ctx.fillRect(0, 0, 400, 50);    // ゴール (y=0)
 
-            // --- レイヤー4: 障害物・敵・家 ---
-            ctx.font = "35px Arial";
-            // 障害物
-            obstacles.forEach(obs => ctx.fillText(obs.icon, obs.x * gridSize + 5, obs.y * gridSize + 40));
-            // カエルの家（少し大きく描画）
+            // 5. 家と障害物
             ctx.font = "45px Arial";
-            ctx.fillText("🏠", 4 * gridSize + 2, 0 * gridSize + 45);
+            ctx.fillText("🏠", 4 * gridSize + 2, 45); // ゴールハウス
             ctx.font = "35px Arial";
+            obstacles.forEach(obs => ctx.fillText(obs.icon, obs.x * gridSize + 5, obs.y * gridSize + 40));
 
-            // 敵の移動と判定
-            enemies.forEach(en => {
-                en.x += (en.speed * en.dir) / 50;
-                if (en.x > 8) en.x = -1; if (en.x < -1) en.x = 8;
-                ctx.fillText(en.icon, en.x * gridSize, en.y * gridSize + 40);
-                if (player.y === en.y && Math.abs(player.x - en.x) < 0.6) {
-                    seCrash.currentTime = 0; seCrash.play().catch(()=>{});
-                    resetPlayer();
-                }
-            });
-
-            // 水没判定
+            // 判定
             if (player.y >= 5 && player.y <= 8 && !onLog) {
-                seCrash.currentTime = 0; seCrash.play().catch(()=>{});
+                seCrash.currentTime = 0; seCrash.play();
                 resetPlayer();
             }
 
-            // --- レイヤー5: プレイヤー ---
+            // 6. プレイヤー
             if (onLog) {
                 player.x += player.vx / gridSize;
                 if(player.x < 0) player.x = 0; if(player.x > 7.1) player.x = 7.1;
@@ -139,7 +131,7 @@
             // ゴール判定
             if (player.y === 0 && Math.round(player.x) === 4) {
                 isCleared = true;
-                seGoal.play().catch(()=>{});
+                seGoal.play();
                 clearScreen.style.display = "block";
             }
             requestAnimationFrame(draw);
@@ -148,18 +140,13 @@
         function resetPlayer() { player.x = 4; player.y = 11; }
 
         function move(dx, dy) {
-            if (isCleared) return;
-            initAudio();
+            if (!gameStarted || isCleared) return;
             let nextX = Math.round(player.x + dx);
             let nextY = player.y + dy;
-
-            // 障害物判定
             if (obstacles.some(obs => obs.x === nextX && obs.y === nextY)) return;
-
             if (nextX >= 0 && nextX <= 7) player.x = nextX;
             if (nextY >= 0 && nextY <= 11) player.y = nextY;
-
-            seJump.currentTime = 0; seJump.play().catch(()=>{});
+            seJump.currentTime = 0; seJump.play();
         }
 
         window.addEventListener("keydown", e => {
@@ -179,8 +166,6 @@
             if (Math.abs(tx - px) > Math.abs(ty - py)) move(tx > px ? 1 : -1, 0);
             else move(0, ty > py ? 1 : -1);
         }, {passive: false});
-
-        draw();
     </script>
 </body>
 </html>
