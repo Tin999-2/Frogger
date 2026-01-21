@@ -3,30 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Frogger - Nature Edition</title>
+    <title>Frogger - Jungle Crisis</title>
     <style>
         body { 
             background: #222; color: white; font-family: sans-serif; text-align: center; 
             margin: 0; padding: 0; overflow: hidden; position: fixed; width: 100%; height: 100%;
         }
         canvas { 
-            background: #111; border: 2px solid #555; 
-            display: block; margin: 0 auto; 
-            width: 95vw; max-width: 400px; height: auto; 
-            touch-action: none;
+            background: #111; border: 2px solid #555; display: block; margin: 0 auto; 
+            width: 95vw; max-width: 400px; height: auto; touch-action: none;
         }
         #clear-screen {
             display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
             background: rgba(0,0,0,0.9); border: 3px solid #f1c40f; padding: 20px; border-radius: 15px; 
             z-index: 10; width: 80%;
         }
-        button { padding: 12px 24px; font-size: 1rem; margin-top: 10px; cursor: pointer; }
     </style>
 </head>
 <body>
 
-    <h2>Avoid Obstacles & Cross</h2>
-    <canvas id="game" width="400" height="550"></canvas>
+    <h2 id="status">Avoid Snakes & Crabs!</h2>
+    <canvas id="game" width="400" height="600"></canvas>
 
     <div id="clear-screen">
         <h2 style="color: #2ecc71;">Goal Reached!</h2>
@@ -39,21 +36,37 @@
         const ctx = canvas.getContext("2d");
         const clearScreen = document.getElementById("clear-screen");
 
+        // --- 音声ファイルの設定 ---
         const bgm = new Audio('/assets/sounds/frog.mp3'); bgm.loop = true;
         const seJump = new Audio('/assets/sounds/jump.mp3');
-        const seCrash = new Audio('/assets/sounds/crash.mp3');
+        const seCrash = new Audio('/assets/sounds/crash.mp3'); // 水没・敵衝突共通
         const seGoal = new Audio('/assets/sounds/goal.mp3');
+
+        let audioInitialized = false;
+        function initAudio() {
+            if (audioInitialized) return;
+            // 全ての音声を一度無音で再生してロックを解除する
+            [bgm, seJump, seCrash, seGoal].forEach(sound => {
+                sound.play().then(() => {
+                    if (sound !== bgm) { sound.pause(); sound.currentTime = 0; }
+                }).catch(() => {});
+            });
+            audioInitialized = true;
+        }
 
         const gridSize = 50;
         let isCleared = false;
-        let frame = 0;
+        
+        // プレイヤー初期位置 (y=11が一番下)
+        const player = { x: 4, y: 11, char: "🐸", vx: 0 };
 
-        const player = { x: 4, y: 10, char: "🐸", vx: 0 };
+        // 静的障害物（中洲のみに配置）
+        const rocks = [{x: 1, y: 4, icon: "🌲"}, {x: 4, y: 4, icon: "🧱"}, {x: 6, y: 4, icon: "🌲"}];
 
-        // 障害物のリスト（木とレンガ）
-        const obstacles = [
-            {x: 2, y: 9, icon: "🌲"}, {x: 5, y: 9, icon: "🧱"}, 
-            {x: 1, y: 4, icon: "🌲"}, {x: 4, y: 4, icon: "🧱"}, {x: 6, y: 4, icon: "🌲"}
+        // 動く敵（手前の広い芝生エリア y=9, 10を歩く）
+        const enemies = [
+            {x: 0, y: 10, speed: 1.5, dir: 1, icon: "🐍"},
+            {x: 7, y: 9, speed: 2.0, dir: -1, icon: "🦀"}
         ];
 
         const lanes = [
@@ -65,19 +78,13 @@
 
         function draw() {
             if (isCleared) return;
-            frame++;
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // --- 1. 背景描画（下層） ---
-            // 空
-            ctx.fillStyle = "#87CEEB";
-            ctx.fillRect(0, 0, 400, 200);
+            // 1. 下地（空と川）
+            ctx.fillStyle = "#87CEEB"; ctx.fillRect(0, 0, 400, 200);
+            ctx.fillStyle = "#2980b9"; ctx.fillRect(0, 250, 400, 200);
 
-            // 川（丸太が流れる場所）
-            ctx.fillStyle = "#2980b9";
-            ctx.fillRect(0, 250, 400, 200);
-
-            // --- 2. 動く丸太の描画（芝生の下を通るように先に描く） ---
+            // 2. 丸太の描画と判定
             let onLog = false;
             player.vx = 0;
             lanes.forEach(lane => {
@@ -86,9 +93,7 @@
                     log.x += lane.speed * lane.dir;
                     if (log.x > 400) log.x = -log.w;
                     if (log.x < -log.w) log.x = 400;
-                    ctx.beginPath();
-                    ctx.roundRect(log.x, lane.y * gridSize + 5, log.w, 40, 10);
-                    ctx.fill();
+                    ctx.beginPath(); ctx.roundRect(log.x, lane.y * gridSize + 5, log.w, 40, 10); ctx.fill();
                     
                     let px = player.x * gridSize + 25;
                     if (player.y === lane.y && px > log.x && px < log.x + log.w) {
@@ -98,37 +103,45 @@
                 });
             });
 
-            // --- 3. 芝生エリアの描画（上層：これで丸太を隠す） ---
+            // 3. 芝生エリア（丸太の上にかぶせる）
             ctx.fillStyle = "#2ecc71";
-            ctx.fillRect(0, 450, 400, 100); // 手前の芝生 (y=9, 10)
+            ctx.fillRect(0, 450, 400, 150); // 手前の芝生を拡大 (y=9, 10, 11)
             ctx.fillRect(0, 200, 400, 50);  // 中洲 (y=4)
-            ctx.fillRect(0, 0, 400, 250);   // ゴールエリア (y=0~3) ※空を上書き
+            ctx.fillRect(0, 0, 400, 50);    // ゴールを1行(50px)に縮小 (y=0)
 
-            // --- 4. 障害物の描画 ---
+            // 4. 静的障害物（中洲のみ）
             ctx.font = "35px Arial";
-            ctx.textAlign = "left";
-            ctx.textBaseline = "alphabetic";
-            obstacles.forEach(obs => {
-                ctx.fillText(obs.icon, obs.x * gridSize + 5, obs.y * gridSize + 40);
+            rocks.forEach(r => ctx.fillText(r.icon, r.x * gridSize + 5, r.y * gridSize + 40));
+
+            // 5. 動く敵の描画と衝突判定
+            enemies.forEach(en => {
+                en.x += (en.speed * en.dir) / 50; // スムーズな移動
+                if (en.x > 8) en.x = -1;
+                if (en.x < -1) en.x = 8;
+                ctx.fillText(en.icon, en.x * gridSize, en.y * gridSize + 40);
+
+                // 敵との当たり判定
+                if (player.y === en.y && Math.abs(player.x - en.x) < 0.6) {
+                    seCrash.currentTime = 0; seCrash.play().catch(()=>{});
+                    resetPlayer();
+                }
             });
 
-            // --- 5. 判定処理 ---
+            // 6. 水没判定
             if (player.y >= 5 && player.y <= 8 && !onLog) {
-                seCrash.play().catch(()=>{});
+                seCrash.currentTime = 0; seCrash.play().catch(()=>{});
                 resetPlayer();
             }
 
+            // 7. プレイヤー描画と移動処理
             if (onLog) {
                 player.x += player.vx / gridSize;
-                if(player.x < 0) player.x = 0;
-                if(player.x > 7) player.x = 7;
+                if(player.x < 0) player.x = 0; if(player.x > 7) player.x = 7;
             }
-
-            // --- 6. プレイヤー描画 ---
             ctx.fillText(player.char, player.x * gridSize + 5, player.y * gridSize + 40);
 
-            // クリア判定 (y=3以下の安全地帯に入ったらゴール)
-            if (player.y <= 3) {
+            // ゴール判定
+            if (player.y === 0) {
                 isCleared = true;
                 seGoal.play().catch(()=>{});
                 clearScreen.style.display = "block";
@@ -136,31 +149,26 @@
             requestAnimationFrame(draw);
         }
 
-        function resetPlayer() {
-            player.x = 4;
-            player.y = 10;
-        }
+        function resetPlayer() { player.x = 4; player.y = 11; }
 
         function move(dx, dy) {
             if (isCleared) return;
-            bgm.play().catch(()=>{});
+            initAudio(); // 最初の操作でオーディオを初期化
 
             let nextX = Math.round(player.x + dx);
             let nextY = player.y + dy;
 
-            // 障害物判定
-            const hitObstacle = obstacles.some(obs => obs.x === nextX && obs.y === nextY);
-            if (hitObstacle) return;
+            // 岩（中洲）の衝突判定
+            const hitRock = rocks.some(r => r.x === nextX && r.y === nextY);
+            if (hitRock) return;
 
-            // 画面範囲制限
+            // 範囲制限
             if (nextX >= 0 && nextX <= 7) player.x = nextX;
-            if (nextY >= 0 && nextY <= 10) player.y = nextY;
+            if (nextY >= 0 && nextY <= 11) player.y = nextY;
 
-            seJump.currentTime = 0;
-            seJump.play().catch(()=>{});
+            seJump.currentTime = 0; seJump.play().catch(()=>{});
         }
 
-        // キーボード操作
         window.addEventListener("keydown", e => {
             if (e.key === "ArrowUp") move(0, -1);
             if (e.key === "ArrowDown") move(0, 1);
@@ -168,15 +176,13 @@
             if (e.key === "ArrowRight") move(1, 0);
         });
 
-        // タップ操作
         canvas.addEventListener("touchstart", e => {
             e.preventDefault();
             const rect = canvas.getBoundingClientRect();
             const t = e.touches[0];
             const tx = (t.clientX - rect.left) * (canvas.width / rect.width);
             const ty = (t.clientY - rect.top) * (canvas.height / rect.height);
-            const px = player.x * gridSize + 25;
-            const py = player.y * gridSize + 25;
+            const px = player.x * gridSize + 25; const py = player.y * gridSize + 25;
             if (Math.abs(tx - px) > Math.abs(ty - py)) move(tx > px ? 1 : -1, 0);
             else move(0, ty > py ? 1 : -1);
         }, {passive: false});
