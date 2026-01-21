@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Frogger - Rocks & River</title>
+    <title>Frogger - Nature Edition</title>
     <style>
         body { 
             background: #222; color: white; font-family: sans-serif; text-align: center; 
@@ -25,8 +25,10 @@
 </head>
 <body>
 
-    <h2>Avoid Rocks & Cross River</h2>
-    <canvas id="game" width="400" height="550"></canvas> <div id="clear-screen">
+    <h2>Avoid Obstacles & Cross</h2>
+    <canvas id="game" width="400" height="550"></canvas>
+
+    <div id="clear-screen">
         <h2 style="color: #2ecc71;">Goal Reached!</h2>
         <div style="font-size: 2rem; color: #f1c40f;">Signal</div>
         <button onclick="location.reload()">Replay</button>
@@ -37,7 +39,6 @@
         const ctx = canvas.getContext("2d");
         const clearScreen = document.getElementById("clear-screen");
 
-        // 音声
         const bgm = new Audio('/assets/sounds/frog.mp3'); bgm.loop = true;
         const seJump = new Audio('/assets/sounds/jump.mp3');
         const seCrash = new Audio('/assets/sounds/crash.mp3');
@@ -47,16 +48,14 @@
         let isCleared = false;
         let frame = 0;
 
-        // プレイヤー初期位置（y=10 は増やした芝生の一番下）
         const player = { x: 4, y: 10, char: "🐸", vx: 0 };
-        let particles = [];
 
-        // 岩の配置（x, yの座標：y=9が手前の新しい芝生エリア）
-        const rocks = [
-            {x: 2, y: 9}, {x: 5, y: 9}, {x: 3, y: 4}, {x: 6, y: 4}
+        // 障害物のリスト（木とレンガ）
+        const obstacles = [
+            {x: 2, y: 9, icon: "🌲"}, {x: 5, y: 9, icon: "🧱"}, 
+            {x: 1, y: 4, icon: "🌲"}, {x: 4, y: 4, icon: "🧱"}, {x: 6, y: 4, icon: "🌲"}
         ];
 
-        // 丸太の設定
         const lanes = [
             { y: 8, speed: 1.5, dir: -1, logs: [{x:0, w:60}, {x:200, w:60}] },
             { y: 7, speed: 1.0, dir: 1,  logs: [{x:50, w:100}, {x:300, w:100}] },
@@ -69,26 +68,16 @@
             frame++;
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // 背景：空
+            // --- 1. 背景描画（下層） ---
+            // 空
             ctx.fillStyle = "#87CEEB";
-            ctx.fillRect(0, 0, 400, 250);
+            ctx.fillRect(0, 0, 400, 200);
 
-            // 川
+            // 川（丸太が流れる場所）
             ctx.fillStyle = "#2980b9";
             ctx.fillRect(0, 250, 400, 200);
 
-            // 芝生（手前を2行分に拡大：y=450〜550）
-            ctx.fillStyle = "#2ecc71";
-            ctx.fillRect(0, 450, 400, 100); // スタートエリア（2行分）
-            ctx.fillRect(0, 200, 400, 50);  // 中洲
-
-            // 岩（Obstacles）の描画
-            ctx.font = "35px Arial";
-            rocks.forEach(r => {
-                ctx.fillText("🪨", r.x * gridSize + 5, r.y * gridSize + 40);
-            });
-
-            // 丸太と判定
+            // --- 2. 動く丸太の描画（芝生の下を通るように先に描く） ---
             let onLog = false;
             player.vx = 0;
             lanes.forEach(lane => {
@@ -109,23 +98,37 @@
                 });
             });
 
-            // 水没判定
+            // --- 3. 芝生エリアの描画（上層：これで丸太を隠す） ---
+            ctx.fillStyle = "#2ecc71";
+            ctx.fillRect(0, 450, 400, 100); // 手前の芝生 (y=9, 10)
+            ctx.fillRect(0, 200, 400, 50);  // 中洲 (y=4)
+            ctx.fillRect(0, 0, 400, 250);   // ゴールエリア (y=0~3) ※空を上書き
+
+            // --- 4. 障害物の描画 ---
+            ctx.font = "35px Arial";
+            ctx.textAlign = "left";
+            ctx.textBaseline = "alphabetic";
+            obstacles.forEach(obs => {
+                ctx.fillText(obs.icon, obs.x * gridSize + 5, obs.y * gridSize + 40);
+            });
+
+            // --- 5. 判定処理 ---
             if (player.y >= 5 && player.y <= 8 && !onLog) {
                 seCrash.play().catch(()=>{});
                 resetPlayer();
             }
 
-            // 丸太移動適用
             if (onLog) {
                 player.x += player.vx / gridSize;
                 if(player.x < 0) player.x = 0;
                 if(player.x > 7) player.x = 7;
             }
 
-            // プレイヤー
+            // --- 6. プレイヤー描画 ---
             ctx.fillText(player.char, player.x * gridSize + 5, player.y * gridSize + 40);
 
-            if (player.y <= 3) { // y=4より上がゴール
+            // クリア判定 (y=3以下の安全地帯に入ったらゴール)
+            if (player.y <= 3) {
                 isCleared = true;
                 seGoal.play().catch(()=>{});
                 clearScreen.style.display = "block";
@@ -142,12 +145,12 @@
             if (isCleared) return;
             bgm.play().catch(()=>{});
 
-            let nextX = player.x + dx;
+            let nextX = Math.round(player.x + dx);
             let nextY = player.y + dy;
 
-            // 岩との衝突判定
-            const hitRock = rocks.some(r => r.x === nextX && r.y === nextY);
-            if (hitRock) return; // 岩があれば移動をキャンセル
+            // 障害物判定
+            const hitObstacle = obstacles.some(obs => obs.x === nextX && obs.y === nextY);
+            if (hitObstacle) return;
 
             // 画面範囲制限
             if (nextX >= 0 && nextX <= 7) player.x = nextX;
@@ -157,6 +160,7 @@
             seJump.play().catch(()=>{});
         }
 
+        // キーボード操作
         window.addEventListener("keydown", e => {
             if (e.key === "ArrowUp") move(0, -1);
             if (e.key === "ArrowDown") move(0, 1);
@@ -164,6 +168,7 @@
             if (e.key === "ArrowRight") move(1, 0);
         });
 
+        // タップ操作
         canvas.addEventListener("touchstart", e => {
             e.preventDefault();
             const rect = canvas.getBoundingClientRect();
