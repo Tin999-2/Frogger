@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Frogger - Jungle Crisis</title>
+    <title>Frogger - Home Sweet Home</title>
     <style>
         body { 
             background: #222; color: white; font-family: sans-serif; text-align: center; 
@@ -18,15 +18,16 @@
             background: rgba(0,0,0,0.9); border: 3px solid #f1c40f; padding: 20px; border-radius: 15px; 
             z-index: 10; width: 80%;
         }
+        button { padding: 12px 24px; font-size: 1rem; margin-top: 10px; cursor: pointer; }
     </style>
 </head>
 <body>
 
-    <h2 id="status">Avoid Snakes & Crabs!</h2>
+    <h2 id="status">Go to the Frog House!</h2>
     <canvas id="game" width="400" height="600"></canvas>
 
     <div id="clear-screen">
-        <h2 style="color: #2ecc71;">Goal Reached!</h2>
+        <h2 style="color: #2ecc71;">Welcome Home!</h2>
         <div style="font-size: 2rem; color: #f1c40f;">Signal</div>
         <button onclick="location.reload()">Replay</button>
     </div>
@@ -36,37 +37,33 @@
         const ctx = canvas.getContext("2d");
         const clearScreen = document.getElementById("clear-screen");
 
-        // --- 音声ファイルの設定 ---
+        // 音声設定
         const bgm = new Audio('/assets/sounds/frog.mp3'); bgm.loop = true;
         const seJump = new Audio('/assets/sounds/jump.mp3');
-        const seCrash = new Audio('/assets/sounds/crash.mp3'); // 水没・敵衝突共通
+        const seCrash = new Audio('/assets/sounds/crash.mp3');
         const seGoal = new Audio('/assets/sounds/goal.mp3');
 
         let audioInitialized = false;
         function initAudio() {
             if (audioInitialized) return;
-            // 全ての音声を一度無音で再生してロックを解除する
-            [bgm, seJump, seCrash, seGoal].forEach(sound => {
-                sound.play().then(() => {
-                    if (sound !== bgm) { sound.pause(); sound.currentTime = 0; }
-                }).catch(() => {});
-            });
+            [bgm, seJump, seCrash, seGoal].forEach(s => { s.play().then(()=>{ if(s!==bgm){s.pause(); s.currentTime=0;} }).catch(()=>{}); });
             audioInitialized = true;
         }
 
         const gridSize = 50;
         let isCleared = false;
-        
-        // プレイヤー初期位置 (y=11が一番下)
         const player = { x: 4, y: 11, char: "🐸", vx: 0 };
 
-        // 静的障害物（中洲のみに配置）
-        const rocks = [{x: 1, y: 4, icon: "🌲"}, {x: 4, y: 4, icon: "🧱"}, {x: 6, y: 4, icon: "🌲"}];
+        // 1. 手前の芝生（y=9, 10）にだけ木とレンガを配置
+        const obstacles = [
+            {x: 1, y: 10, icon: "🌲"}, {x: 6, y: 10, icon: "🧱"},
+            {x: 3, y: 9, icon: "🌲"}, {x: 5, y: 9, icon: "🧱"}
+        ];
 
-        // 動く敵（手前の広い芝生エリア y=9, 10を歩く）
+        // 2. 敵のスピードを1/4（0.3～0.5程度）に落とす
         const enemies = [
-            {x: 0, y: 10, speed: 1.5, dir: 1, icon: "🐍"},
-            {x: 7, y: 9, speed: 2.0, dir: -1, icon: "🦀"}
+            {x: 0, y: 10, speed: 0.4, dir: 1, icon: "🐍"},
+            {x: 7, y: 9, speed: 0.5, dir: -1, icon: "🦀"}
         ];
 
         const lanes = [
@@ -80,11 +77,11 @@
             if (isCleared) return;
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // 1. 下地（空と川）
-            ctx.fillStyle = "#87CEEB"; ctx.fillRect(0, 0, 400, 200);
-            ctx.fillStyle = "#2980b9"; ctx.fillRect(0, 250, 400, 200);
+            // --- レイヤー1: 川 ---
+            ctx.fillStyle = "#2980b9";
+            ctx.fillRect(0, 250, 400, 200);
 
-            // 2. 丸太の描画と判定
+            // --- レイヤー2: 丸太 ---
             let onLog = false;
             player.vx = 0;
             lanes.forEach(lane => {
@@ -94,54 +91,53 @@
                     if (log.x > 400) log.x = -log.w;
                     if (log.x < -log.w) log.x = 400;
                     ctx.beginPath(); ctx.roundRect(log.x, lane.y * gridSize + 5, log.w, 40, 10); ctx.fill();
-                    
-                    let px = player.x * gridSize + 25;
-                    if (player.y === lane.y && px > log.x && px < log.x + log.w) {
-                        onLog = true;
-                        player.vx = lane.speed * lane.dir;
+                    if (player.y === lane.y && (player.x * gridSize + 25) > log.x && (player.x * gridSize + 25) < log.x + log.w) {
+                        onLog = true; player.vx = lane.speed * lane.dir;
                     }
                 });
             });
 
-            // 3. 芝生エリア（丸太の上にかぶせる）
+            // --- レイヤー3: 芝生（川の上にかぶせる） ---
             ctx.fillStyle = "#2ecc71";
-            ctx.fillRect(0, 450, 400, 150); // 手前の芝生を拡大 (y=9, 10, 11)
+            ctx.fillRect(0, 450, 400, 150); // 手前の芝生 (y=9, 10, 11)
             ctx.fillRect(0, 200, 400, 50);  // 中洲 (y=4)
-            ctx.fillRect(0, 0, 400, 50);    // ゴールを1行(50px)に縮小 (y=0)
+            ctx.fillRect(0, 0, 400, 50);    // ゴール地点 (y=0)
 
-            // 4. 静的障害物（中洲のみ）
+            // --- レイヤー4: 障害物・敵・家 ---
             ctx.font = "35px Arial";
-            rocks.forEach(r => ctx.fillText(r.icon, r.x * gridSize + 5, r.y * gridSize + 40));
+            // 障害物
+            obstacles.forEach(obs => ctx.fillText(obs.icon, obs.x * gridSize + 5, obs.y * gridSize + 40));
+            // カエルの家（少し大きく描画）
+            ctx.font = "45px Arial";
+            ctx.fillText("🏠", 4 * gridSize + 2, 0 * gridSize + 45);
+            ctx.font = "35px Arial";
 
-            // 5. 動く敵の描画と衝突判定
+            // 敵の移動と判定
             enemies.forEach(en => {
-                en.x += (en.speed * en.dir) / 50; // スムーズな移動
-                if (en.x > 8) en.x = -1;
-                if (en.x < -1) en.x = 8;
+                en.x += (en.speed * en.dir) / 50;
+                if (en.x > 8) en.x = -1; if (en.x < -1) en.x = 8;
                 ctx.fillText(en.icon, en.x * gridSize, en.y * gridSize + 40);
-
-                // 敵との当たり判定
                 if (player.y === en.y && Math.abs(player.x - en.x) < 0.6) {
                     seCrash.currentTime = 0; seCrash.play().catch(()=>{});
                     resetPlayer();
                 }
             });
 
-            // 6. 水没判定
+            // 水没判定
             if (player.y >= 5 && player.y <= 8 && !onLog) {
                 seCrash.currentTime = 0; seCrash.play().catch(()=>{});
                 resetPlayer();
             }
 
-            // 7. プレイヤー描画と移動処理
+            // --- レイヤー5: プレイヤー ---
             if (onLog) {
                 player.x += player.vx / gridSize;
-                if(player.x < 0) player.x = 0; if(player.x > 7) player.x = 7;
+                if(player.x < 0) player.x = 0; if(player.x > 7.1) player.x = 7.1;
             }
             ctx.fillText(player.char, player.x * gridSize + 5, player.y * gridSize + 40);
 
             // ゴール判定
-            if (player.y === 0) {
+            if (player.y === 0 && Math.round(player.x) === 4) {
                 isCleared = true;
                 seGoal.play().catch(()=>{});
                 clearScreen.style.display = "block";
@@ -153,16 +149,13 @@
 
         function move(dx, dy) {
             if (isCleared) return;
-            initAudio(); // 最初の操作でオーディオを初期化
-
+            initAudio();
             let nextX = Math.round(player.x + dx);
             let nextY = player.y + dy;
 
-            // 岩（中洲）の衝突判定
-            const hitRock = rocks.some(r => r.x === nextX && r.y === nextY);
-            if (hitRock) return;
+            // 障害物判定
+            if (obstacles.some(obs => obs.x === nextX && obs.y === nextY)) return;
 
-            // 範囲制限
             if (nextX >= 0 && nextX <= 7) player.x = nextX;
             if (nextY >= 0 && nextY <= 11) player.y = nextY;
 
